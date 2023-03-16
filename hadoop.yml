@@ -1,0 +1,114 @@
+
+---
+
+- hosts: datanode
+  vars:
+    - path_to_hadoop_arh: <path to hadoop archive.tar.gz>
+  tasks:
+  - name:  "Create Folder /root/Downloads if not exist"
+    file:
+      path: /root/Downloads
+      mode: 0755
+      state: directory
+    become: yes
+
+  - name: "check java"
+    shell: "java -version"
+    ignore_errors: yes
+    register: x
+
+  - name: "Install Java"
+    apt:
+      name: "openjdk-8-jdk"
+      state: present
+      update_cache: yes
+    become: yes
+    when: x.rc != 0
+
+  - name: "Copying installation files"
+    copy:
+      src: '{{path_to_hadoop_arh}}'
+      dest: "/home/test/Downloads/"
+
+  - name: "Installing Hadoop"
+    ignore_errors: yes
+    command: "tar -xvzf {{ item  }}"
+    loop:
+    - /home/test/Downloads/hadoop-3.3.4.tar.gz
+
+  - name: "Configure /bashrc"
+    lineinfile:
+      path: .bashrc
+      line: '{{item}}'
+    with_items:
+      - 'export JAVA_HOME=/usr/lib/jvm/java-8-openjdk-amd64'
+      - 'export PATH=$PATH:/usr/lib/jvm/java-8-openjdk-amd64/bin'
+      - 'export HADOOP_HOME=~/hadoop-3.3.4/'
+      - 'export PATH=$PATH:$HADOOP_HOME/bin'
+      - 'export PATH=$PATH:$HADOOP_HOME/sbin'
+      - 'export HADOOP_MAPRED_HOME=$HADOOP_HOME'
+      - 'export YARN_HOME=$HADOOP_HOME'
+      - 'export HADOOP_CONF_DIR=$HADOOP_HOME/etc/hadoop'
+      - 'export HADOOP_COMMON_LIB_NATIVE_DIR=$HADOOP_HOME/lib/native'
+      - 'export HADOOP_OPTS="-Djava.library.path=$HADOOP_HOME/lib/native"'
+      - 'export HADOOP_STREAMING=$HADOOP_HOME/share/hadoop/tools/lib/hadoop-streaming-3.3.4.jar'
+      - 'export PDSH_RCMD_TYPE=ssh'
+
+  - name: "Set the path for JAVA_HOME"
+    lineinfile:
+      path: hadoop-3.3.4/etc/hadoop/hadoop-env.sh
+      line: '{{item}}'
+    with_items:
+      - 'JAVA_HOME=/usr/lib/jvm/java-8-openjdk-amd64'
+      - 'export HADOOP_SSH_OPTS="-p 22"'
+
+  - name: "Configure core-site.xml"
+    lineinfile:
+      path: hadoop-3.3.4/etc/hadoop/core-site.xml
+      insertbefore: '</configuration>'
+      line: '{{item}}'
+    with_items:
+      - '<property> <name>fs.default.name</name> <value>hdfs://localhost:9000</value> </property> '
+      - '<property> <name>hadoop.proxyuser.dataflair.groups</name> <value>*</value> </property> '
+      - '<property> <name>hadoop.proxyuser.dataflair.hosts</name> <value>*</value> </property> '
+      - '<property> <name>hadoop.proxyuser.server.hosts</name> <value>*</value> </property> '
+      - '<property> <name>hadoop.proxyuser.server.groups</name> <value>*</value> </property>'
+
+  - name: "Configure hdfs-site.xml"
+    lineinfile:
+      path: hadoop-3.3.4/etc/hadoop/hdfs-site.xml
+      insertbefore: '</configuration>'
+      line: '{{item}}'
+    with_items:
+      - '<property> <name>dfs.replication</name> <value>1</value> </property>'
+
+  - name: "Configure mapred-site.xml"
+    lineinfile:
+      path: hadoop-3.3.4/etc/hadoop/mapred-site.xml
+      insertbefore: '</configuration>'
+      line: '{{item}}'
+    with_items:
+      - '<property> <name>mapreduce.framework.name</name>  <value>yarn</value>  </property>'
+      - ' <property> <name>mapreduce.application.classpath</name> <value>$HADOOP_MAPRED_HOME/share/hadoop/mapreduce/*:$HADOOP_MAPRED_HOME/share/hadoop/mapreduce/lib/*</value> </property>'
+
+  - name: "Configure yarn-site.xml"
+    lineinfile:
+      path: hadoop-3.3.4/etc/hadoop/yarn-site.xml
+      insertbefore: '</configuration>'
+      line: '{{item}}'
+    with_items:
+      - '<property> <name>yarn.nodemanager.aux-services</name> <value>mapreduce_shuffle</value> </property>'
+      - '<property> <name>yarn.nodemanager.env-whitelist</name> <value>JAVA_HOME,HADOOP_COMMON_HOME,HADOOP_HDFS_HOME,HADOOP_CONF_DIR,CLASSPATH_PREP END_DISTCACHE,HADOOP_YARN_HOME,HADOOP_MAPRED_HOME</value> </property>'
+
+  - name: "Configure hdfs"
+    command: "hadoop-3.3.4/bin/hdfs namenode -format"
+
+  - name: "Format the file system"
+    shell: "export PDSH_RCMD_TYPE=ssh"
+
+  - name: "Starting"
+    shell: source /home/test/.bashrc start-all.sh
+    args:
+      executable: /bin/bash
+
+
