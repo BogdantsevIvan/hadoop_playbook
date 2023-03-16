@@ -1,7 +1,7 @@
 
 ---
 
-- hosts: datanode
+- hosts: hadoop
   vars:
     - path_to_hadoop_arh: <path to hadoop archive.tar.gz>
   tasks:
